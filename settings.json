@@ -1,0 +1,33 @@
+{
+	"mydigitalstructure":
+	{
+		"hostname": "api.mydigitalstructure.cloud", 
+		"logon": "xero-integration@xxx", 
+		"password": "xxxx", 
+		"email": "learn@mydigitalstructure.cloud",
+		"testing": 
+		{
+			"status": "true",
+			"showData": "true",
+			"break": "-"
+		},
+		"convert": "true",
+		"contactGroups": "1234",
+		"conversation": "12345",
+		"xeroURL": "12345",
+		"invoiceStatuses":
+		{
+			"tobesenttoxero": "0",
+			"senttoxero": "0",
+			"donotsendtoxero": "0",
+			"fullypaidinxero": "0"
+		}
+	},
+	"xero":
+	{
+		"clientID": "XX...",
+		"clientSecret": "XX....",
+		"redirectURL": "https://xxx.com",
+		"scopes": "offline_access openid profile email accounting.transactions accounting.contacts accounting.settings accounting.settings.read"
+	}
+}

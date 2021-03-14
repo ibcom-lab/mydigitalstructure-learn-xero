@@ -1,0 +1,32 @@
+{
+    "name": "mydigitalstructure-xero",
+    "version": "1.0.0",
+    "licence": [
+        {
+            "type": "MIT",
+            "url": "https://github.com/ibcom/mydigitalstructure-push/raw/master/LICENSE"
+        }
+    ],
+    "description": "xero.com integration",
+    "preferGlobal": "true",
+    "main": "index.js",
+    "bin": {},
+    "author": "Mark Byers",
+    "keywords": [
+        "Push"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/ibcom/mydigitalstructure-xero.git"
+    },
+    "dependencies": {
+        "jwt-decode": "^3.1.2",
+        "lodash": "*",
+        "moment": "^2.19.1",
+        "mydigitalstructure": "^2.1.7",
+        "xero-node": "^4.10.0"
+    },
+    "engines": {
+        "node": "*"
+    }
+}
