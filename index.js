@@ -1,5 +1,9 @@
 /*
-	MYDIGITALSTRUCTURE-LEARN--XERO;
+	MYDIGITALSTRUCTURE-XERO;
+
+	"get-contacts-from-xero" - get from xero.com
+
+	"add-invoices-to-xero" - add to xero.com
 
 	Depends on;
 	https://learn-next.mydigitalstructure.cloud/learn-function-automation
@@ -27,6 +31,8 @@
 	lambda-local -l index.js -t 9000 -e event-get-invoices.json
 	lambda-local -l index.js -t 9000 -e event-create-contacts.json
 	lambda-local -l index.js -t 9000 -e event-create-credit-notes.json
+	lambda-local -l index.js -t 9000 -e event-apply-credit-notes.json
+	lambda-local -l index.js -t 9000 -e event-create-apply-credit-notes.json
 
 	Upload to lambda; Terminal;
 	zip -r ../mydigitalstructure-xero-DDMMMYYY-1.zip *
@@ -1377,7 +1383,8 @@ exports.handler = function (event, context, callback)
 							'financialaccount',
 							'financialaccounttext',
 							'notes',
-							'reasontext'
+							'reasontext',
+							'reference'
 						],
 
 						filters: filters,
@@ -1500,10 +1507,19 @@ exports.handler = function (event, context, callback)
 
 						if (creditNotesToBeSentToXero.length == 0)
 						{
-							mydigitalstructure.invoke('util-end',
+							var event = mydigitalstructure.get({scope: '_event'});
+
+							if (event.apply == "true")
 							{
-								message: 'No credit notes to send to xero'
-							})
+								mydigitalstructure.invoke('app-process-apply-credit-notes');
+							}
+							else
+							{
+								mydigitalstructure.invoke('util-end',
+								{
+									message: 'No credit notes to send to xero'
+								});
+							}
 						}
 						else
 						{
@@ -1604,7 +1620,6 @@ exports.handler = function (event, context, callback)
 			}
 		});
 	
-
 		mydigitalstructure.add(
 		{
 			name: 'app-process-create-credit-notes-contact-links',
@@ -1912,11 +1927,21 @@ exports.handler = function (event, context, callback)
 				}
 				else
 				{
-					mydigitalstructure.invoke('util-end',
+					var event = mydigitalstructure.get({scope: '_event'});
+					mydigitalstructure.invoke('util-end', event);
+					
+					if (event.apply == "true")
 					{
-						message: 'create-credit-notes; Complete.',
-						count: creditNotesToBeSentToXero.length
-					});
+						mydigitalstructure.invoke('app-process-apply-credit-notes');
+					}
+					else
+					{
+						mydigitalstructure.invoke('util-end',
+						{
+							message: 'create-credit-notes; Complete.',
+							count: creditNotesToBeSentToXero.length
+						});
+					}
 				}		
 			}
 		});
@@ -1985,7 +2010,475 @@ exports.handler = function (event, context, callback)
 				}
 			}
 		});
+
+//---- APPLY-CREDIT-NOTES
+
+		mydigitalstructure.add(
+		{
+			name: 'app-process-apply-credit-notes',
+			code: function (param, response)
+			{
+				var settings = mydigitalstructure.get({scope: '_settings'});
+
+				
+				if (response == undefined)
+				{
+					var filters = 
+					[
+						{
+							field: 'createddate',
+							comparison: 'GREATER_THAN_OR_EQUAL_TO',
+							value: moment().add(-7, 'days').format('DD MMM YYYY')
+						}
+					]
+
+					if (_.has(settings, 'mydigitalstructure.creditNoteCreatedAfterDate'))
+					{
+						filters.push(
+						{
+							field: 'invoicecreditnote.creditnote.createddate',
+							comparison: 'GREATER_THAN',
+							value: settings.mydigitalstructure.creditNoteCreatedAfterDate
+						})
+					}
+
+					if (_.has(settings, 'mydigitalstructure.invoiceCreatedAfterDate'))
+					{
+						filters.push(
+						{
+							field: 'invoicecreditnote.invoice.createddate',
+							comparison: 'GREATER_THAN',
+							value: settings.mydigitalstructure.invoiceCreatedAfterDate
+						})
+					}
+
+					mydigitalstructure.cloud.search(
+					{
+						object: 'financial_invoice_credit_note',
+						fields:
+						[
+							'invoice', 'amount', 'appliesdate', 'credit', 'credittext'
+						],
+						filters: filters,
+						rows: 99999,
+						sorts:
+						[
+							{
+								field: 'id',
+								direction: 'desc'
+							}
+						],
+						callback: 'app-process-apply-credit-notes'
+					});
+				}
+				else
+				{
+					var applyCreditNotes = mydigitalstructure.set(
+					{
+						scope: 'app',
+						context: 'app-process-apply-credit-notes',
+						value: response.data.rows
+					});
+
+					if (applyCreditNotes.length == 0)
+					{
+						mydigitalstructure.invoke('util-end', 'No credit notes to apply');
+					}
+
+					mydigitalstructure.invoke('app-process-apply-credit-notes-links');		
+				}
+			}
+		});	
+
+		mydigitalstructure.add(
+		{
+			name: 'app-process-apply-credit-notes-links',
+			code: function (param, response)
+			{
+				var settings = mydigitalstructure.get({scope: '_settings'});
+
+				var applyCreditNotes = mydigitalstructure.get(
+				{
+					scope: 'app',
+					context: 'app-process-apply-credit-notes'
+				});
+
+				if (applyCreditNotes.length == 0)
+				{
+					mydigitalstructure.invoke('util-end',
+					{
+						message: 'No credit notes to apply.'
+					});
+				}
+				else
+				{
+					if (response == undefined)
+					{
+						var filters = 
+						[
+							{
+								field: 'url',
+								value: settings.mydigitalstructure.xeroURL
+							},
+							{
+								field: 'object',
+								value: 245
+							},
+							{
+								field: 'objectcontext',
+								comparison: 'IN_LIST',
+								value: _.join(_.map(applyCreditNotes, 'id'), ',')
+							}
+						]
+
+						mydigitalstructure.cloud.search(
+						{
+							object: 'core_url_link',
+							fields:
+							[
+								'objectcontext', 'urlguid'
+							],
+							filters: filters,
+							rows: 99999,
+							sorts:
+							[
+								{
+									field: 'id',
+									direction: 'desc'
+								}
+							],
+							callback: 'app-process-apply-credit-notes-links'
+						});
+					}
+					else
+					{
+						var applyCreditNoteLinks = mydigitalstructure.set(
+						{
+							scope: 'app',
+							context: 'app-process-apply-credit-notes-links',
+							value: response.data.rows
+						});
+
+						_.each(applyCreditNotes, function (applyCreditNote)
+						{
+							applyCreditNote._xeroLink = 
+								_.find(applyCreditNoteLinks, function (applyCreditNoteLink)
+								{
+									return (applyCreditNoteLink.objectcontext == applyCreditNote.id)
+								});
+
+							applyCreditNote.xeroLink = (applyCreditNote._xeroLink != undefined)
+						});
+
+						var applyCreditNotesToBeSentToXero = mydigitalstructure.set(
+						{
+							scope: 'app',
+							context: 'app-process-apply-credit-notes-to-be-sent-to-xero',
+							value: _.filter(applyCreditNotes, function (applyCreditNote)
+							{
+								return (!applyCreditNote.xeroLink)
+							})
+						});
+
+						if (applyCreditNotesToBeSentToXero.length == 0)
+						{
+							mydigitalstructure.invoke('util-end',
+							{
+								message: 'No credit note applications to send to xero'
+							})
+						}
+						else
+						{
+							//mydigitalstructure.invoke('util-end', applyCreditNotesToBeSentToXero);
+							mydigitalstructure.invoke('app-process-apply-credit-notes-invoices-links');
+						}
+					}
+				}
+			}
+		});
 	
+		mydigitalstructure.add(
+		{
+			name: 'app-process-apply-credit-notes-invoices-links',
+			code: function (param, response)
+			{
+				var settings = mydigitalstructure.get({scope: '_settings'});
+
+				var applyCreditNotesToBeSentToXero = mydigitalstructure.get(
+				{
+					scope: 'app',
+					context: 'app-process-apply-credit-notes-to-be-sent-to-xero'
+				});
+
+			
+				if (response == undefined)
+				{
+					var filters = 
+					[
+						{
+							field: 'url',
+							value: settings.mydigitalstructure.xeroURL
+						},
+						{ name: '(' },
+							{
+								field: 'object',
+								value: 5
+							},
+							{
+								field: 'objectcontext',
+								comparison: 'IN_LIST',
+								value: _.join(_.map(applyCreditNotesToBeSentToXero, 'invoice'), ',')
+							},
+						{ name: 'or' },
+							{
+								field: 'object',
+								value: 69
+							},
+							{
+								field: 'objectcontext',
+								comparison: 'IN_LIST',
+								value: _.join(_.map(applyCreditNotesToBeSentToXero, 'credit'), ',')
+							},
+						{ name: ')' }
+					]
+
+					mydigitalstructure.cloud.search(
+					{
+						object: 'core_url_link',
+						fields:
+						[
+							'object', 'objectcontext', 'urlguid'
+						],
+						filters: filters,
+						rows: 99999,
+						sorts:
+						[
+							{
+								field: 'id',
+								direction: 'desc'
+							}
+						],
+						callback: 'app-process-apply-credit-notes-invoices-links'
+					});
+				}
+				else
+				{
+					var applyCreditNoteInvoicesLinks = mydigitalstructure.set(
+					{
+						scope: 'app',
+						context: 'app-process-apply-credit-notes-invoices-links',
+						value: response.data.rows
+					});
+
+					_.each(applyCreditNotesToBeSentToXero, function (applyCreditNoteToBeSentToXero)
+					{
+						applyCreditNoteToBeSentToXero._xeroInvoiceLink = 
+							_.find(applyCreditNoteInvoicesLinks, function (applyCreditNoteInvoicesLink)
+							{
+								return (applyCreditNoteInvoicesLink.objectcontext == applyCreditNoteToBeSentToXero.invoice
+										&& applyCreditNoteInvoicesLink.object == 5)
+							});
+
+						applyCreditNoteToBeSentToXero._xeroCreditNoteLink = 
+							_.find(applyCreditNoteInvoicesLinks, function (applyCreditNoteInvoicesLink)
+							{
+								return (applyCreditNoteInvoicesLink.objectcontext == applyCreditNoteToBeSentToXero.credit
+										&& applyCreditNoteInvoicesLink.object == 69)
+							});
+
+						applyCreditNoteToBeSentToXero.xeroInvoiceLink = (applyCreditNoteToBeSentToXero._xeroInvoiceLink != undefined);
+						applyCreditNoteToBeSentToXero.xeroCreditNoteLink = (applyCreditNoteToBeSentToXero._xeroCreditNoteLink != undefined);
+
+						applyCreditNoteToBeSentToXero.canBeSentToXero = (applyCreditNoteToBeSentToXero.xeroInvoiceLink && applyCreditNoteToBeSentToXero.xeroCreditNoteLink)
+					});
+
+					var applyCreditNotesToBeSentToXero = mydigitalstructure.set(
+					{
+						scope: 'app',
+						context: 'app-process-apply-credit-notes-to-be-sent-to-xero',
+						value: _.filter(applyCreditNotesToBeSentToXero, function (applyCreditNoteToBeSentToXero)
+						{
+							return (applyCreditNoteToBeSentToXero.canBeSentToXero)
+						})
+					});
+
+					if (applyCreditNotesToBeSentToXero.length == 0)
+					{
+						mydigitalstructure.invoke('util-end',
+						{
+							message: 'No credit note applications to send to xero with valid links'
+						})
+					}
+					else
+					{
+						//mydigitalstructure.invoke('util-end', applyCreditNotesToBeSentToXero);
+						mydigitalstructure.invoke('app-process-apply-credit-notes-process');
+					}
+				}
+			}
+		});
+
+		mydigitalstructure.add(
+		{
+			name: 'app-process-apply-credit-notes-process',
+			notes: 'Send credit notes to xero',
+			code: function (param)
+			{
+				var applyCreditNotesToBeSentToXero = mydigitalstructure.get(
+				{
+					scope: 'app',
+					context: 'app-process-apply-credit-notes-to-be-sent-to-xero'
+				});
+
+				var index = mydigitalstructure.get(
+				{
+					scope: 'app-process-apply-credit-notes-process',
+					context: 'index',
+					valueDefault: 0
+				});
+
+				if (index < applyCreditNotesToBeSentToXero.length)
+				{
+					var applyCreditNoteToBeSentToXero = applyCreditNotesToBeSentToXero[index];
+
+					if (!applyCreditNoteToBeSentToXero.canBeSentToXero)
+					{
+						console.log('!!ERROR; Missing Credit Note or Invoice Xero Link');
+						console.log(applyCreditNoteToBeSentToXero);
+					}
+					else
+					{
+						var applyCreditNoteXeroID = applyCreditNoteToBeSentToXero._xeroCreditNoteLink.urlguid;
+						var xeroApplyCreditNoteApplicationData =
+						{
+							amount: applyCreditNoteToBeSentToXero.amount,
+							date: applyCreditNoteToBeSentToXero.appliesdate,
+							invoice:
+							{
+								invoiceID: applyCreditNoteToBeSentToXero._xeroInvoiceLink.urlguid
+							},
+						}
+
+						var xeroApplyCreditNoteApplication =
+						{
+							allocations:
+							[
+								xeroApplyCreditNoteApplicationData
+							]
+						};
+
+						applyCreditNoteToBeSentToXero._xeroData = xeroApplyCreditNoteApplication;
+						console.log(xeroApplyCreditNoteApplication);
+
+						//mydigitalstructure.invoke('util-end');
+
+						var xeroTenant = mydigitalstructure.get(
+						{
+							scope: 'app',
+							context: 'xero-tenant'
+						});
+
+						xero.accountingApi.createCreditNoteAllocation(xeroTenant.tenantId, applyCreditNoteXeroID, xeroApplyCreditNoteApplication, true)
+						.then(function (data)
+						{	
+							applyCreditNoteToBeSentToXero._xero = data.response.body;
+
+							mydigitalstructure.set(
+							{
+								scope: 'app-process-apply-credit-notes-process-next',
+								context: 'xero-credit-note-application',
+								value: data.response.body
+							});
+
+							console.log(applyCreditNoteToBeSentToXero._xero)
+
+							mydigitalstructure.invoke('app-process-apply-credit-notes-process-next');
+						},
+						function (data)
+						{
+							//console.log(data);
+							console.log(data.response.body);
+							console.log(data.response.body.Elements[0].ValidationErrors);
+						});	
+					}	
+				}
+				else
+				{
+					mydigitalstructure.invoke('util-end',
+					{
+						message: 'apply-credit-notes; Complete.',
+						count: applyCreditNotesToBeSentToXero.length
+					});
+				}		
+			}
+		});
+
+		mydigitalstructure.add(
+		{
+			name: 'app-process-apply-credit-notes-process-next',
+			code: function (param, response)
+			{
+				var applyCreditNotesToBeSentToXero = mydigitalstructure.get(
+				{
+					scope: 'app',
+					context: 'app-process-apply-credit-notes-to-be-sent-to-xero'
+				});
+
+				var index = mydigitalstructure.get(
+				{
+					scope: 'app-process-apply-credit-notes-process',
+					context: 'index',
+					valueDefault: 0
+				});
+	
+				if (response == undefined)
+				{
+					var xeroCreditNoteApplicationData = mydigitalstructure.get(
+					{
+						scope: 'app-process-apply-credit-notes-process-next',
+						context: 'xero-credit-note-application'
+					});
+
+					var applyCreditNoteToBeSentToXero = applyCreditNotesToBeSentToXero[index];
+
+					//create link
+					if (_.has(xeroCreditNoteApplicationData, 'Allocations'))
+					{
+						var settings = mydigitalstructure.get({scope: '_settings'});
+
+						var data =
+						{
+							url: settings.mydigitalstructure.xeroURL,
+							object: 245,
+							objectcontext: applyCreditNoteToBeSentToXero.id,
+							urlguid: xeroCreditNoteApplicationData.Id,
+							urlreference: _.truncate(applyCreditNoteToBeSentToXero.credittext, 97)
+						}
+
+						//mydigitalstructure.invoke('util-end', data);
+
+						mydigitalstructure.cloud.save(
+						{
+							object: 'core_url_link',
+							data: data,
+							callback: 'app-process-apply-credit-notes-process-next'
+						});
+					}
+				}
+				else
+				{
+					mydigitalstructure.set(
+					{
+						scope: 'app-process-apply-credit-notes-process',
+						context: 'index',
+						value: index + 1
+					});
+
+					mydigitalstructure.invoke('app-process-apply-credit-notes-process');
+				}
+			}
+		});
+
 //---- CREATE-INVOICES
 
 		mydigitalstructure.add(
