@@ -34,6 +34,15 @@ mydigitalstructure.cloud.save({object: 'core_url_manage', data: {title: 'Xero In
 -- get contacts and store xero ContactID as CORE_URL_LINK_ against business contact
 -- send invoices based on stored contactID - store xero invoiceID as CORE_URL_LINK_ against Invoice.
 
+# Test runs;
+lambda-local -l index.js -t 9000 -e event-get-contacts.json
+lambda-local -l index.js -t 9000 -e event-create-invoices.json
+lambda-local -l index.js -t 9000 -e event-get-invoices.json
+lambda-local -l index.js -t 9000 -e event-create-contacts.json
+lambda-local -l index.js -t 9000 -e event-create-credit-notes.json
+lambda-local -l index.js -t 9000 -e event-apply-credit-notes.json
+lambda-local -l index.js -t 9000 -e event-create-apply-credit-notes.json
+
 # More;
 
 https://xeroapi.github.io/xero-node/v4/accounting/#api-Accounting-getContacts
