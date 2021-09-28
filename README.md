@@ -9,6 +9,22 @@ Xero integration
 
 - Store tokens on myds as CORE_PROTECT_KEY_ against user. Type=2 (Private). Use Reference = 'xero-refresh-token'
 
+# Preparation;
+
+- Set up Invoice Statuses - update settings.json
+
+Use https://console.mydigitalstructure.cloud > Browser Dev Tools Console:
+
+mydigitalstructure.cloud.save({object: 'setup_financial_invoice_status', data: {title: 'Do Not Send To Xero'}})
+mydigitalstructure.cloud.save({object: 'setup_financial_invoice_status', data: {title: 'To Be Sent To Xero'}})
+mydigitalstructure.cloud.save({object: 'setup_financial_invoice_status', data: {title: 'Sent To Xero'}})
+mydigitalstructure.cloud.save({object: 'setup_financial_invoice_status', data: {title: 'Fully Paid In Xero'}})
+
+- Set up URL Connection as type 14 (xero) -  update settings.json
+Use https://console.mydigitalstructure.cloud > Browser Dev Tools Console:
+
+mydigitalstructure.cloud.save({object: 'core_url_manage', data: {title: 'Xero Integration', private: 'N', public: 'N', type: 14, description: 'DO NOT delete this, as it is used by the xero integration agent.'})
+
 # Techical;
 
 - index-proxy-connect.js; lambda - gateway API - to get consent URL and then get tokens after user Allow Access

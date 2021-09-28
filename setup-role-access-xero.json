@@ -1,0 +1,51 @@
+﻿{
+	"template":
+	{
+		"roles":
+		[
+			{
+				"title": "Xero Connect (OAuth2)",
+				"methods":
+				[
+					{"title": "LOGON", "canuse": "Y", "canadd": "N", "canupdate": "N", "canremove": "N", "guidmandatory": "N"},
+					{"title": "CORE_LOGOFF", "canuse": "Y", "canadd": "N", "canupdate": "N", "canremove": "N", "guidmandatory": "N"},
+					{"title": "CORE_MORE_SEARCH", "canuse": "Y", "canadd": "N", "canupdate": "N", "canremove": "N", "guidmandatory": "N"},
+					{"title": "CORE_PROTECT_KEY_SEARCH", "canuse": "Y", "canadd": "N", "canupdate": "N", "canremove": "N", "guidmandatory": "N"},
+					{"title": "SETUP_USER_SEARCH", "canuse": "Y", "canadd": "N", "canupdate": "N", "canremove": "N", "guidmandatory": "N"},
+					{"title": "CORE_LOG_MANAGE", "canuse": "N", "canadd": "Y", "canupdate": "N", "canremove": "N", "guidmandatory": "N"},
+					{"title": "CORE_PROTECT_KEY_MANAGE", "canuse": "N", "canadd": "Y", "canupdate": "N", "canremove": "Y", "guidmandatory": "N"}
+				],
+				"properties": []
+			},
+			{
+				"title": "Xero Sync",
+				"methods":
+				[
+					{"title": "LOGON", "canuse": "Y", "canadd": "N", "canupdate": "N", "canremove": "N", "guidmandatory": "N"},
+					{"title": "CORE_LOGOFF", "canuse": "Y", "canadd": "N", "canupdate": "N", "canremove": "N", "guidmandatory": "N"},
+					{"title": "CORE_MORE_SEARCH", "canuse": "Y", "canadd": "N", "canupdate": "N", "canremove": "N", "guidmandatory": "N"},
+					{"title": "CORE_PROTECT_KEY_SEARCH", "canuse": "Y", "canadd": "N", "canupdate": "N", "canremove": "N", "guidmandatory": "N"},
+					{"title": "SETUP_USER_SEARCH", "canuse": "Y", "canadd": "N", "canupdate": "N", "canremove": "N", "guidmandatory": "N"},
+					{"title": "SETUP_FINANCIAL_ACCOUNT_SEARCH", "canuse": "Y", "canadd": "N", "canupdate": "N", "canremove": "N", "guidmandatory": "N"},
+					{"title": "CORE_LOG_MANAGE", "canuse": "N", "canadd": "Y", "canupdate": "N", "canremove": "N", "guidmandatory": "N"},
+					{"title": "CORE_PROTECT_KEY_MANAGE", "canuse": "N", "canadd": "Y", "canupdate": "N", "canremove": "Y", "guidmandatory": "N"},
+					{"title": "CORE_URL_SEARCH", "canuse": "Y", "canadd": "N", "canupdate": "N", "canremove": "N", "guidmandatory": "N"},
+					{"title": "SETUP_FINANCIAL_INVOICE_STATUS_SEARCH", "canuse": "Y", "canadd": "N", "canupdate": "N", "canremove": "N", "guidmandatory": "N"},
+					{"title": "CONTACT_BUSINESS_GROUP_SEARCH", "canuse": "Y", "canadd": "N", "canupdate": "N", "canremove": "N", "guidmandatory": "N"},
+					{"title": "MESSAGING_CONVERSATION_POST_MANAGE", "canuse": "N", "canadd": "Y", "canupdate": "N", "canremove": "N", "guidmandatory": "N"},
+					{"title": "CORE_URL_LINK_SEARCH", "canuse": "Y", "canadd": "N", "canupdate": "N", "canremove": "N", "guidmandatory": "N"},
+					{"title": "CORE_URL_LINK_MANAGE", "canuse": "N", "canadd": "Y", "canupdate": "N", "canremove": "N", "guidmandatory": "N"},
+					{"title": "FINANCIAL_INVOICE_SEARCH", "canuse": "Y", "canadd": "N", "canupdate": "N", "canremove": "N", "guidmandatory": "N"},
+					{"title": "FINANCIAL_ITEM_SEARCH", "canuse": "Y", "canadd": "N", "canupdate": "N", "canremove": "N", "guidmandatory": "N"},
+					{"title": "FINANCIAL_INVOICE_CREDIT_NOTE_SEARCH", "canuse": "Y", "canadd": "N", "canupdate": "N", "canremove": "N", "guidmandatory": "N"},
+					{"title": "FINANCIAL_CREDIT_NOTE_SEARCH", "canuse": "Y", "canadd": "N", "canupdate": "N", "canremove": "N", "guidmandatory": "N"},
+					{"title": "CONTACT_BUSINESS_SEARCH", "canuse": "Y", "canadd": "N", "canupdate": "N", "canremove": "N", "guidmandatory": "N"},
+					{"title": "CONTACT_PERSON_SEARCH", "canuse": "Y", "canadd": "N", "canupdate": "N", "canremove": "N", "guidmandatory": "N"},
+					{"title": "FINANCIAL_INVOICE_MANAGE", "canuse": "N", "canadd": "Y", "canupdate": "N", "canremove": "N", "guidmandatory": "N"}
+				],
+				"properties": []
+			}
+			
+		]
+	}
+}

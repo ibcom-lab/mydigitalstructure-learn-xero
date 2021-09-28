@@ -15,6 +15,9 @@
 		"contactGroups": "1234",
 		"conversation": "12345",
 		"xeroURL": "12345",
+		"invoicesMaximum": "100",
+		"invoiceCreatedAfterDate": "01 SEP 2021",
+		"creditNotesCreatedAfterDate": "01 SEP 2021",
 		"invoiceStatuses":
 		{
 			"tobesenttoxero": "0",

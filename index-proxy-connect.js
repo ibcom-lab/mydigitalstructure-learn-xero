@@ -61,7 +61,23 @@ exports.handler = function (event, context, callback)
 
 	const promise = new Promise(function(resolve, reject)
 	{	
-		mydigitalstructure.init(main)
+		/*
+		f (event != undefined)
+		{
+			if (event.site != undefined)
+			{
+				settings = event.site;
+				//ie use settings-[event.site].json
+			}
+			else
+			{
+				settings = event;
+			}
+		}
+		*/
+
+		mydigitalstructure.init(main);
+		//mydigitalstructure.init(main, settings);
 
 		function main(err, data)
 		{
@@ -567,11 +583,12 @@ exports.handler = function (event, context, callback)
 					{
 						const xero = new xeroNode.XeroClient(
 						{
-			            clientId: settings.xero.clientID,
-			            clientSecret: settings.xero.clientSecret,
-			            redirectUris: [settings.xero.redirectURL],
-			            scopes: settings.xero.scopes.split(" "),
-			        });
+							clientId: settings.xero.clientID,
+							clientSecret: settings.xero.clientSecret,
+							redirectUris: [settings.xero.redirectURL],
+							scopes: settings.xero.scopes.split(" "),
+							state: '123'
+						});
 
 						xero.buildConsentUrl().then(
 							function (data)
@@ -599,9 +616,9 @@ exports.handler = function (event, context, callback)
 							statusCode: 301,
 							headers:
 							{
-		               	"Access-Control-Allow-Origin": "*",
-		               	Location: param.consentURL
-		           		}
+								"Access-Control-Allow-Origin": "*",
+								Location: param.consentURL
+		           			}
 						};
 
 						resolve(httpResponse)
@@ -641,10 +658,10 @@ exports.handler = function (event, context, callback)
 					{
 						const xero = new xeroNode.XeroClient(
 						{
-			            clientId: settings.xero.clientID,
-			            clientSecret: settings.xero.clientSecret,
-			            redirectUris: [settings.xero.redirectURL],
-			            scopes: settings.xero.scopes.split(" "),
+							clientId: settings.xero.clientID,
+							clientSecret: settings.xero.clientSecret,
+							redirectUris: [settings.xero.redirectURL],
+							scopes: settings.xero.scopes.split(" "),
 			        	});
 
 						var url = event.rawPath + '?' + event.rawQueryString;

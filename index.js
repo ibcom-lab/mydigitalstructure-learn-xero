@@ -1,9 +1,5 @@
 /*
-	MYDIGITALSTRUCTURE-XERO;
-
-	"get-contacts-from-xero" - get from xero.com
-
-	"add-invoices-to-xero" - add to xero.com
+	MYDIGITALSTRUCTURE-LEARN--XERO;
 
 	Depends on;
 	https://learn-next.mydigitalstructure.cloud/learn-function-automation
@@ -29,6 +25,15 @@
 	lambda-local -l index.js -t 9000 -e event-get-contacts.json
 	lambda-local -l index.js -t 9000 -e event-create-invoices.json
 	lambda-local -l index.js -t 9000 -e event-get-invoices.json
+	lambda-local -l index.js -t 9000 -e event-create-contacts.json
+	lambda-local -l index.js -t 9000 -e event-create-credit-notes.json
+
+	Upload to lambda; Terminal;
+	zip -r ../mydigitalstructure-xero-DDMMMYYY-1.zip *
+
+	Setup;
+
+	Using https://console.mydigitalstructure.cloud
 
 	mydigitalstructure.cloud.search(
 	{
@@ -37,6 +42,13 @@
 	});
 
 	0/ SETUP XERO CONNECTION/URL IN MYDS
+
+	mydigitalstructure.cloud.search(
+	{
+		object: 'core_url',
+		fields: ['title', 'type'],
+		filters: {type: 14}
+	});
 
 	mydigitalstructure.cloud.save(
 	{
@@ -47,6 +59,21 @@
 			notes: 'If delete this connection the integration with xero will not work.',
 			type: 14,
 			url: 'https://xero.com'
+		}
+	});
+
+	mydigitalstructure.cloud.search(
+	{
+		object: 'setup_financial_invoice_status',
+		fields: ['title']
+	});
+
+	mydigitalstructure.cloud.save(
+	{
+		object: 'setup_financial_invoice_status',
+		data:
+		{
+			title: 'Do not send to xero'
 		}
 	});
 
@@ -73,22 +100,24 @@
 		object: 'setup_financial_invoice_status',
 		data:
 		{
-			title: 'Do not send to xero'
-		}
-	});
-
-	mydigitalstructure.cloud.save(
-	{
-		object: 'setup_financial_invoice_status',
-		data:
-		{
 			title: 'Fully paid in xero'
 		}
 	});
 
-	DOES refresh-token exist for user - if not got to proxy-connect 
+	Update settings.json
+
+	? DOES refresh-token exist for user - if not got to proxy-connect 
 			-- user being the integration proxy.
 
+	
+	CONTACT_LINKS:
+
+	mydigitalstructure.cloud.search(
+	{
+		object: 'core_url_link',
+		fields: ['urlreference'],
+		filters: {object: 12, objectcontext: 1007301}
+	});
 */
 
 exports.handler = function (event, context, callback)
@@ -119,13 +148,31 @@ exports.handler = function (event, context, callback)
 		value: callback
 	});
 
-	mydigitalstructure.init(main)
+	var settings;
+
+	if (event != undefined)
+	{
+		if (event.site != undefined)
+		{
+			settings = event.site;
+			//ie use settings-[event.site].json
+		}
+	}
+
+	mydigitalstructure.init(main, settings)
 
 	function main(err, data)
 	{
 		/*
 			app initialises with mydigitalstructure.invoke('app-init') after controllers added.
 		*/
+
+		var settings = mydigitalstructure.get(
+		{
+			scope: '_settings'
+		});
+
+		console.log(settings);
 
 		mydigitalstructure.add(
 		{
@@ -334,22 +381,27 @@ exports.handler = function (event, context, callback)
 					context: 'xero-tenant'
 				});
 
+				//xeroTenantId, ifModifiedSince, where, order, iDs, page, includeArchived, summaryOnly
+
 				xero.accountingApi.getContacts(xeroTenant.tenantId)
 				.then(function (data)
 				{
-					mydigitalstructure.set(
+					console.log(data.body.contacts.length);
+					//console.log(data.body.contacts);
+					//var fs = require('fs'); fs.writeFile("contacts.json", JSON.stringify(data.body.contacts), function (err) {})
+
+					var xeroContacts = mydigitalstructure.set(
 					{
 						scope: 'app',
 						context: 'xero-contacts',
 						value: data.body.contacts
 					});
 
-					var xeroContactCustomers = mydigitalstructure.set(
+					mydigitalstructure.set(
 					{
 						scope: 'app',
 						context: 'xero-contacts-customers',
-						value: _.map(_.filter(data.body.contacts, function(contact) {return contact.isCustomer}),
-											function (customer) {return {name: customer.name, id: customer.contactID}})
+						value: _.map(xeroContacts, function (customer) {return {name: customer.name, id: customer.contactID}})
 					});
 
 					mydigitalstructure.invoke('app-process-get-contacts-match')
@@ -423,13 +475,21 @@ exports.handler = function (event, context, callback)
 						context: 'xero-contacts-customers'
 					});
 
+					//var fs = require('fs'); fs.writeFile("contacts-xero.json", JSON.stringify(xeroContactCustomers), function (err) {})
+
 					_.each(xeroContactCustomers, function (xeroContactCustomer)
 					{
+						xeroContactCustomer._name = _.split(xeroContactCustomer.name, ' (');
+						xeroContactCustomer.legalname = _.first(xeroContactCustomer._name);
+						xeroContactCustomer.tradename = _.first(_.split(_.last(xeroContactCustomer._name), ')'));
+
 						xeroContactCustomer._mydigitalstructureContact = 
 							_.find(mydigitalstructureContacts, function (mydigitalstructureContact)
 							{
-								return (mydigitalstructureContact.tradename.toLowerCase() == xeroContactCustomer.name.toLowerCase()
-											|| mydigitalstructureContact.legalname.toLowerCase() == xeroContactCustomer.name.toLowerCase())
+								return (mydigitalstructureContact.tradename.toLowerCase() == xeroContactCustomer.tradename.toLowerCase()
+											|| mydigitalstructureContact.legalname.toLowerCase() == xeroContactCustomer.legalname.toLowerCase()
+											|| mydigitalstructureContact.tradename.toLowerCase() == xeroContactCustomer.legalname.toLowerCase()
+											|| mydigitalstructureContact.legalname.toLowerCase() == xeroContactCustomer.tradename.toLowerCase())
 							});
 
 						xeroContactCustomer.matched = (xeroContactCustomer._mydigitalstructureContact != undefined);
@@ -440,6 +500,8 @@ exports.handler = function (event, context, callback)
 							xeroContactCustomer.mydigitalstructureContactID = xeroContactCustomer._mydigitalstructureContact.id;
 						}
 					});
+
+					var fs = require('fs'); fs.writeFile("contacts-xero-processed.json", JSON.stringify(xeroContactCustomers), function (err) {})
 
 					mydigitalstructure.set(
 					{
@@ -470,12 +532,12 @@ exports.handler = function (event, context, callback)
 
 					var xeroContactCustomersUnmatched = _.filter(xeroContactCustomers, function (xeroContactCustomer) {return !xeroContactCustomer.matched});
 
-					if (xeroContactCustomersUnmatched.length != 0)
+					if (false && xeroContactCustomersUnmatched.length != 0)
 					{
 						var message = [];
 
-						message.push('<p>Hi, the following customer contacts in xero could not be matched (based on trading name or legal name) to a certification body, auditor, retailer or trainer within HARPSonline.</p>')
-						message.push('<p>You need to either update the contact in xero or HARPSonline so they match.</p>');
+						message.push('<p>Hi, the following customer contacts in xero could not be matched (based on trading name or legal name) to a contact within mydigitalstructure.</p>')
+						message.push('<p>You need to either update the contact in xero or mydigitalstructure so they match.</p>');
 						message.push('<ul>');
 
 						_.each(xeroContactCustomersUnmatched, function (xeroContactCustomerUnmatched)
@@ -483,7 +545,7 @@ exports.handler = function (event, context, callback)
 							message.push('<li>' + encodeURIComponent(xeroContactCustomerUnmatched.name) + '</li>');
 						});
 						message.push('</ul>');
-						message.push('<p>Thanks, HARPSonline to xero integration.</p>');
+						message.push('<p>Thanks, xero integration.</p>');
 
 						var data = 
 						{
@@ -503,7 +565,7 @@ exports.handler = function (event, context, callback)
 				}
 				else
 				{
-					mydigitalstructure.invoke('app-process-get-contacts-check-complete')
+					mydigitalstructure.invoke('app-process-get-contacts-check-complete');
 				}
 			}
 		});
@@ -566,7 +628,13 @@ exports.handler = function (event, context, callback)
 								}
 							],
 							rows: 99999,
-							sorts: [],
+							sorts:
+							[
+								{
+									field: 'id',
+									direction: 'desc'
+								}
+							],
 							callback: 'app-process-get-contacts-link'
 						});
 					}
@@ -696,8 +764,1229 @@ exports.handler = function (event, context, callback)
 			}
 		});
 
+		//---- create-contacts
+		//---- Create contacts in the xero based on invoices
 
-	//---- create-invoices
+		mydigitalstructure.add(
+		{
+			name: 'app-process-create-contacts',
+			code: function (param, response)
+			{				
+				var settings = mydigitalstructure.get({scope: '_settings'});
+
+				if (response == undefined)
+				{
+					var filters = 
+					[
+						{
+							name: '('
+						},
+						{
+							field: 'status',
+							comparison: 'EQUAL_TO',
+							value: settings.mydigitalstructure.invoiceStatuses.tobesenttoxero
+						},
+						{
+							name: 'or'
+						},
+						{
+							field: 'status',
+							comparison: 'IS_NULL'
+						},
+						{
+							name: ')'
+						},
+						{
+							field: 'amount',
+							comparison: 'NOT_EQUAL_TO',
+							value: 0
+						},
+					]
+
+					if (_.has(settings, 'mydigitalstructure.invoiceCreatedAfterDate'))
+					{
+						filters.push(
+						{
+							field: 'createddate',
+							comparison: 'GREATER_THAN',
+							value: settings.mydigitalstructure.invoiceCreatedAfterDate
+						})
+					}
+					else
+					{
+						filters.push(
+						{
+							field: 'createddate',
+							comparison: 'GREATER_THAN_OR_EQUAL_TO',
+							value: moment().add(-7, 'days').format('DD MMM YYYY')
+						})
+					}
+
+					if (settings.mydigitalstructure.invoicesMaximum == undefined)
+					{
+						settings.mydigitalstructure.invoicesMaximum = 100 
+					}
+
+					console.log(settings.mydigitalstructure.invoicesMaximum);
+
+					mydigitalstructure.cloud.search(
+					{
+						object: 'financial_invoice',
+						fields:
+						[
+							'guid', 'contactbusinesssentto', 'contactpersonsentto', 'sentdate', 'duedate', 'reference',
+							'invoice.contactbusinesssentto.legalname', 'invoice.contactbusinesssentto.phonenumber',
+							'invoice.contactbusinesssentto.email', 'invoice.contactbusinesssentto.abn',
+							'invoice.contactbusinesssentto.mailingaddress1', 'invoice.contactbusinesssentto.mailingaddress2',
+							'invoice.contactbusinesssentto.mailingsuburb', 'invoice.contactbusinesssentto.mailingstate',
+							'invoice.contactbusinesssentto.mailingpostcode', 'invoice.contactbusinesssentto.mailingcountry',
+							'invoice.contactbusinesssentto.phonenumber',
+							'invoice.contactbusinesssentto.guid',
+							'invoice.contactpersonsentto.firstname', 'invoice.contactpersonsentto.surname',
+							'invoice.contactpersonsentto.workphone', 'invoice.contactpersonsentto.email',
+							'invoice.contactpersonsentto.mailingaddress1', 'invoice.contactpersonsentto.mailingaddress2',
+							'invoice.contactpersonsentto.mailingsuburb', 'invoice.contactpersonsentto.mailingstate',
+							'invoice.contactpersonsentto.mailingpostcode', 'invoice.contactpersonsentto.mailingcountry',
+							'invoice.contactpersonsentto.guid'
+						],
+
+						filters: filters,
+						sorts:
+						[
+							{
+								name: 'createddate',
+								direction: 'asc'
+							}
+						],
+						rows: settings.mydigitalstructure.invoicesMaximum,
+						callback: 'app-process-create-contacts'
+					});
+				}
+				else
+				{
+					mydigitalstructure.set(
+					{
+						scope: 'app',
+						context: 'mydigitalstructure-invoices-create-contacts-invoices-to-be-sent',
+						value: response.data.rows
+					});
+
+					mydigitalstructure.invoke('app-process-create-contacts-check')
+				}
+			}
+		});
+
+		mydigitalstructure.add(
+		{
+			name: 'app-process-create-contacts-check',
+			notes: 'Get the links to check if the contacts on the invoices have a link to xero.',
+			code: function (param, response)
+			{
+				var settings = mydigitalstructure.get({scope: '_settings'});
+
+				var invoiceContacts = mydigitalstructure.get(
+				{
+					scope: 'app',
+					context: 'mydigitalstructure-invoices-create-contacts-invoices-to-be-sent'
+				});
+	
+				if (invoiceContacts.length == 0)
+				{
+					mydigitalstructure.invoke('util-end', {message: 'app-process-create-contacts-check; No contacts.'});
+				}
+				else
+				{
+					if (response == undefined)
+					{
+						var contactsBusiness = [];
+						var contactsPerson = [];
+
+						var filters =
+						[
+							{
+								field: 'url',
+								value: settings.mydigitalstructure.xeroURL
+							},
+							{ name: '('}
+						]
+
+						var contacts = [];
+
+						_.each(invoiceContacts, function (invoiceContact)
+						{
+							if (invoiceContact.contactbusinesssentto != '')
+							{
+								var _contact = _.find(contacts, function (contact)
+								{
+									contact.object == 12 && contact.objectcontext == invoiceContact.contactbusinesssentto
+								})
+
+								if (_contact == undefined)
+								{
+									var email = invoiceContact['invoice.contactbusinesssentto.email'];
+									if (email == '')
+									{
+										email = invoiceContact['invoice.contactpersonsentto.email']
+									}
+
+									var phone = invoiceContact['invoice.contactbusinesssentto.phonenumber'];
+									if (phone == '')
+									{
+										phone = invoiceContact["invoice.contactpersonsentto.workphone"]
+									}
+
+									contacts.push(
+									{
+										object: 12,
+										objectcontext: invoiceContact.contactbusinesssentto,
+										data:
+										{
+											name: invoiceContact['invoice.contactbusinesssentto.legalname'],
+											firstName: invoiceContact['invoice.contactpersonsentto.firstname'],
+											lastName: invoiceContact['invoice.contactpersonsentto.surname'],
+											contactNumber: invoiceContact['invoice.contactbusinesssentto.guid'],
+											emailAddress: email,
+											taxNumber: invoiceContact['invoice.contactbusinesssentto.abn'],
+											addresses:
+											[
+												{
+													addressType: xeroNode.Address.AddressTypeEnum.POBOX,
+													addressLine1: invoiceContact['invoice.contactbusinesssentto.mailingaddress1'] + 
+														(invoiceContact["invoice.contactbusinesssentto.mailingaddress2"] != '' 
+															? ', ' + invoiceContact["invoice.contactbusinesssentto.mailingaddress2"] 
+															: ''),
+													city: invoiceContact["invoice.contactbusinesssentto.mailingsuburb"],
+													region: invoiceContact["invoice.contactbusinesssentto.mailingstate"],
+													postalCode: invoiceContact["invoice.contactbusinesssentto.mailingpostcode"],
+													country: invoiceContact["invoice.contactbusinesssentto.mailingcountry"]
+												}
+											],
+											phones:
+											[
+												{
+													phoneType: xeroNode.Phone.PhoneTypeEnum.DEFAULT,
+													phoneNumber: phone
+												}
+											]
+										}
+									})
+								}
+
+								contactsBusiness.push(invoiceContact.contactbusinesssentto)
+							}
+		
+							if (invoiceContact.contactpersonsentto != '' && invoiceContact.contactbusinesssentto == '')
+							{
+								var _contact = _.find(contacts, function (contact)
+								{
+									contact.object == 32 && contact.objectcontext == invoiceContact.contactpersonsentto
+								})
+
+								if (_contact == undefined)
+								{
+									contacts.push(
+									{
+										object: 32,
+										objectcontext: invoiceContact.contactpersonsentto,
+										data:
+										{
+											name: invoiceContact['invoice.contactpersonsentto.firstname'] + ' ' +
+											invoiceContact['invoice.contactpersonsentto.surname'],
+											firstName: invoiceContact['invoice.contactpersonsentto.firstname'],
+											lastName: invoiceContact['invoice.contactpersonsentto.surname'],
+											contactNumber: invoiceContact['invoice.contactpersonsentto.guid'],
+											emailAddress: invoiceContact['invoice.contactpersonsentto.email'],
+											addresses:
+											[
+												{
+													addressType: xeroNode.Address.AddressTypeEnum.POBOX,
+													addressLine1: invoiceContact['invoice.contactpersonsentto.mailingaddress1'] + 
+														(invoiceContact["invoice.contactbusinesssentto.mailingaddress2"] != '' 
+															? ', ' + invoiceContact["invoice.contactpersonsentto.mailingaddress2"] 
+															: ''),
+													city: invoiceContact["invoice.contactpersonsentto.mailingsuburb"],
+													region: invoiceContact["invoice.contactpersonsentto.mailingstate"],
+													postalCode: invoiceContact["invoice.contactpersonsentto.mailingpostcode"],
+													country: invoiceContact["invoice.contactpersonsentto.mailingcountry"]
+												}
+											],
+											phones:
+											[
+												{
+													phoneType: xeroNode.Phone.PhoneTypeEnum.DEFAULT,
+													phoneNumber: invoiceContact["invoice.contactpersonsentto.workphone"]
+												}
+											]
+										}
+									})
+								}
+
+								contactsPerson.push(invoiceContact.contactpersonsentto)
+							}
+						});
+
+						mydigitalstructure.set(
+						{
+							scope: 'app',
+							context: 'mydigitalstructure-invoices-create-contacts',
+							value: contacts
+						});
+
+						if (contactsBusiness.length != 0)
+						{
+							filters = _.concat(filters,
+							{
+								field: 'object',
+								value: 12
+							},
+							{
+								field: 'objectcontext',
+								comparison: 'IN_LIST',
+								value: contactsBusiness.join(',')
+							});
+
+							if (contactsPerson.length != 0)
+							{
+								filters = _.concat(filters, { name: 'or'});
+							}
+						}
+
+						if (contactsPerson.length != 0)
+						{
+							filters = _.concat(filters,
+							{
+								field: 'object',
+								value: 32
+							},
+							{
+								field: 'objectcontext',
+								comparison: 'IN_LIST',
+								value: contactsPerson.join(',')
+							});
+						}
+
+						filters = _.concat(filters, { name: ')'});
+
+						mydigitalstructure.cloud.search(
+						{
+							object: 'core_url_link',
+							fields:
+							[
+								'object', 'objectcontext', 'urlguid'
+							],
+							filters: filters,
+							rows: 99999,
+							sorts:
+							[
+
+							],
+							callback: 'app-process-create-contacts-check'
+						});
+					}
+					else
+					{
+						var createContactsLinks = mydigitalstructure.set(
+						{
+							scope: 'app',
+							context: 'mydigitalstructure-invoices-create-contacts-links',
+							value: response.data.rows
+						});
+
+						var createContacts = mydigitalstructure.get(
+						{
+							scope: 'app',
+							context: 'mydigitalstructure-invoices-create-contacts'
+						});
+
+						_.each(createContacts, function (contact)
+						{
+							contact._contactLink = 
+								_.find(createContactsLinks, function (createContactsLink)
+								{
+									return (
+												contact.object == createContactsLink.object &&
+												contact.objectcontext == createContactsLink.objectcontext)
+								});
+
+								contact.linked = (contact._contactLink != undefined);
+
+							if (contact.linked)
+							{
+								contact.linkID = contact._contactLink.urlguid;
+							}
+						});
+
+						mydigitalstructure.set(
+						{
+							scope: 'app',
+							context: 'mydigitalstructure-invoices-create-contacts',
+							value: createContacts
+						});
+					
+						var createContactsToBeCreated = _.filter(createContacts, function (createContact)
+						{
+							return (!createContact.linked)
+						});
+
+						mydigitalstructure.set(
+						{
+							scope: 'app',
+							context: 'mydigitalstructure-invoices-create-contacts-to-be-created',
+							value: createContactsToBeCreated
+						});
+
+						if (createContactsToBeCreated.length == 0)
+						{
+							mydigitalstructure.invoke('util-end', {message: 'create-contacts; No contacts to create.'});
+						}
+						else
+						{
+							mydigitalstructure.invoke('app-process-create-contacts-process');
+						}
+						
+					}
+				}
+			}
+		});
+
+		mydigitalstructure.add(
+		{
+			name: 'app-process-create-contacts-process',
+			code: function (param)
+			{
+				//create contacts in xero
+				//https://xeroapi.github.io/xero-node/accounting/index.html#api-Accounting-createContacts
+
+				var contactsToBeCreated = mydigitalstructure.get(
+				{
+					scope: 'app',
+					context: 'mydigitalstructure-invoices-create-contacts'
+				});
+
+				//console.log(contactsToBeCreated)
+
+				var index = mydigitalstructure.get(
+				{
+					scope: 'app-process-create-contacts-process',
+					context: 'index',
+					valueDefault: 0
+				});
+
+				if (index < contactsToBeCreated.length)
+				{
+					var contactToBeCreated = contactsToBeCreated[index];
+			
+					//console.log(xeroNode.Contact);
+					//console.log(xeroNode.Address);
+					//console.log(xeroNode.Phone);
+
+					//mydigitalstructure.invoke('util-end')
+
+					var xeroContactData =
+					{
+						contactStatus: xeroNode.Contact.ContactStatusEnum.ACTIVE,
+						defaultCurrency: 'AUD'
+					};
+
+					xeroContactData = _.assign(xeroContactData, contactToBeCreated.data);
+
+					var xeroData =
+					{
+						contacts:
+						[
+							xeroContactData
+						]
+					};
+
+					console.log(xeroData);
+
+					//mydigitalstructure.invoke('util-end', xeroData);
+
+					var xeroTenant = mydigitalstructure.get(
+					{
+						scope: 'app',
+						context: 'xero-tenant'
+					});
+
+					xero.accountingApi.createContacts(xeroTenant.tenantId, xeroData)
+					.then(function (data)
+					{	
+						contactToBeCreated._xero = data.response.body;
+
+						mydigitalstructure.set(
+						{
+							scope: 'app-process-create-contacts-process-next',
+							context: 'xero-contact',
+							value: data.response.body
+						});
+
+						mydigitalstructure.set(
+						{
+							scope: 'app',
+							context: 'mydigitalstructure-invoices-create-contacts',
+							value: contactsToBeCreated
+						});
+
+						//console.log(contactToBeCreated._xero)
+						//mydigitalstructure.invoke('util-end', contactToBeCreated._xero);
+
+						mydigitalstructure.invoke('app-process-create-contacts-process-next');
+					},
+					function (data)
+					{
+						//console.log(data.response.body);
+						//console.log(data.response.body.Elements[0].ValidationErrors);
+
+						mydigitalstructure.set(
+						{
+							scope: 'app-process-create-contacts-process',
+							context: 'index',
+							value: index + 1
+						});
+		
+						mydigitalstructure.invoke('app-process-create-contacts-process');
+					}
+					);
+					
+				}
+				else
+				{
+					console.log(contactsToBeCreated);
+					mydigitalstructure.invoke('util-end',
+					{
+						notes: 'create-contacts; Complete.',
+						totalCount: contactsToBeCreated.length,
+						updatedAddedCount: _.filter(contactsToBeCreated, function (contactToBeCreated) {return contactToBeCreated._xero != undefined}).length
+					});
+				}		
+			}
+		});
+
+		mydigitalstructure.add(
+		{
+			name: 'app-process-create-contacts-process-next',
+			code: function (param, response)
+			{
+				var index = mydigitalstructure.get(
+				{
+					scope: 'app-process-create-contacts-process',
+					context: 'index'
+				});
+
+				if (response == undefined)
+				{
+					var xeroContactData = mydigitalstructure.get(
+					{
+						scope: 'app-process-create-contacts-process-next',
+						context: 'xero-contact'
+					})
+
+					var contactsToBeCreated = mydigitalstructure.get(
+					{
+						scope: 'app',
+						context: 'mydigitalstructure-invoices-create-contacts'
+					});
+	
+					var contactToBeCreated = contactsToBeCreated[index];
+
+					//create link
+					if (_.has(xeroContactData, 'Contacts'))
+					{
+						var settings = mydigitalstructure.get({scope: '_settings'});
+
+						var xeroContact = _.first(xeroContactData.Contacts)
+
+						var data =
+						{
+							url: settings.mydigitalstructure.xeroURL,
+							object: contactToBeCreated.object,
+							objectcontext: contactToBeCreated.objectcontext,
+							urlguid: xeroContact.ContactID,
+							urlreference: _.truncate(xeroContact.Name, 97)
+						}
+
+						console.log(data);
+
+						mydigitalstructure.cloud.save(
+						{
+							object: 'core_url_link',
+							data: data,
+							callback: 'app-process-create-contacts-process-next'
+						});
+					}
+				}
+				else
+				{
+					mydigitalstructure.set(
+					{
+						scope: 'app-process-create-contacts-process',
+						context: 'index',
+						value: index + 1
+					});
+
+					mydigitalstructure.invoke('app-process-create-contacts-process');
+				}
+			}
+		});
+
+//---- CREATE-CREDIT_NOTES
+//---- Create contacts in the xero based on credit notes
+
+		mydigitalstructure.add(
+		{
+			name: 'app-process-create-credit-notes',
+			code: function (param, response)
+			{				
+				//mydigitalstructure.invoke('util-end', xeroNode.CreditNote);
+
+				var settings = mydigitalstructure.get({scope: '_settings'});
+
+				if (response == undefined)
+				{
+					var filters = 
+					[
+						{
+							field: 'createddate',
+							comparison: 'GREATER_THAN_OR_EQUAL_TO',
+							value: moment().add(-7, 'days').format('DD MMM YYYY')
+						}
+					]
+
+					if (_.has(settings, 'mydigitalstructure.creditNoteCreatedAfterDate'))
+					{
+						filters.push(
+						{
+							field: 'createddate',
+							comparison: 'GREATER_THAN',
+							value: settings.mydigitalstructure.creditNoteCreatedAfterDate
+						})
+					}
+
+					mydigitalstructure.cloud.search(
+					{
+						object: 'financial_credit_note',
+						fields:
+						[
+							'guid',
+							'amount',
+							'contactbusiness',
+							'contactperson',
+							'creditdate',
+							'type', 'typetext',
+							'taxtype',
+							'financialaccount',
+							'financialaccounttext',
+							'notes',
+							'reasontext'
+						],
+
+						filters: filters,
+						sorts:
+						[
+							{
+								name: 'createddate',
+								direction: 'asc'
+							}
+						],
+						rows: 9999,
+						callback: 'app-process-create-credit-notes'
+					});
+				}
+				else
+				{
+					console.log(response.data.rows)
+
+					mydigitalstructure.set(
+					{
+						scope: 'app',
+						context: 'app-process-create-credit-notes',
+						value: response.data.rows
+					});
+
+					mydigitalstructure.invoke('app-process-create-credit-notes-links')
+				}
+			}
+		});
+
+		mydigitalstructure.add(
+		{
+			name: 'app-process-create-credit-notes-links',
+			code: function (param, response)
+			{
+				var settings = mydigitalstructure.get({scope: '_settings'});
+
+				var creditNotes = mydigitalstructure.get(
+				{
+					scope: 'app',
+					context: 'app-process-create-credit-notes'
+				});
+
+				if (creditNotes.length == 0)
+				{
+					mydigitalstructure.invoke('util-end',
+					{
+						message: 'No credit notes'
+					});
+				}
+				else
+				{
+					if (response == undefined)
+					{
+						var filters = 
+						[
+							{
+								field: 'url',
+								value: settings.mydigitalstructure.xeroURL
+							},
+							{
+								field: 'object',
+								value: 69
+							},
+							{
+								field: 'objectcontext',
+								comparison: 'IN_LIST',
+								value: _.join(_.map(creditNotes, 'id'), ',')
+							}
+						]
+
+						mydigitalstructure.cloud.search(
+						{
+							object: 'core_url_link',
+							fields:
+							[
+								'objectcontext', 'urlguid'
+							],
+							filters: filters,
+							rows: 99999,
+							sorts:
+							[
+								{
+									field: 'id',
+									direction: 'desc'
+								}
+							],
+							callback: 'app-process-create-credit-notes-links'
+						});
+					}
+					else
+					{
+						var creditNoteLinks = mydigitalstructure.set(
+						{
+							scope: 'app',
+							context: 'app-process-create-credit-notes-links',
+							value: response.data.rows
+						});
+
+						_.each(creditNotes, function (creditNote)
+						{
+							creditNote._xeroLink = 
+								_.find(creditNoteLinks, function (creditNoteLink)
+								{
+									return (creditNoteLink.objectcontext == creditNote.id)
+								});
+
+								creditNote.xeroLink = (creditNote._xeroLink != undefined)
+						});
+
+						var creditNotesToBeSentToXero = mydigitalstructure.set(
+						{
+							scope: 'app',
+							context: 'app-process-create-credit-notes-to-be-sent-to-xero',
+							value: _.filter(creditNotes, function (creditNote)
+							{
+								return (!creditNote.xeroLink)
+							})
+						});
+
+						if (creditNotesToBeSentToXero.length == 0)
+						{
+							mydigitalstructure.invoke('util-end',
+							{
+								message: 'No credit notes to send to xero'
+							})
+						}
+						else
+						{
+							mydigitalstructure.invoke('app-process-create-credit-notes-financial-accounts');
+						}
+					}
+				}
+			}
+		});
+
+		mydigitalstructure.add(
+		{
+			name: 'app-process-create-credit-notes-financial-accounts',
+			code: function (param, response)
+			{
+				var settings = mydigitalstructure.get({scope: '_settings'});
+
+				var creditNotes = mydigitalstructure.get(
+				{
+					scope: 'app',
+					context: 'app-process-create-credit-notes-to-be-sent-to-xero'
+				});
+
+				if (creditNotes.length == 0)
+				{
+					mydigitalstructure.invoke('util-end',
+					{
+						message: 'No credit notes'
+					});
+				}
+				else
+				{
+					if (response == undefined)
+					{
+						var filters = 
+						[
+							{
+								field: 'id',
+								comparison: 'IN_LIST',
+								value: _.join(_.map(creditNotes, 'financialaccount'), ',')
+							}
+						]
+
+						mydigitalstructure.cloud.search(
+						{
+							object: 'setup_financial_account',
+							fields:
+							[
+								'title', 'code'
+							],
+							filters: filters,
+							rows: 99999,
+							sorts:
+							[
+								{
+									field: 'id',
+									direction: 'desc'
+								}
+							],
+							callback: 'app-process-create-credit-notes-financial-accounts'
+						});
+					}
+					else
+					{
+						var creditNoteFinancialAccounts = mydigitalstructure.set(
+						{
+							scope: 'app',
+							context: 'app-process-create-credit-notes-financial-accounts',
+							value: response.data.rows
+						});
+
+						_.each(creditNotes, function (creditNote)
+						{
+							creditNote._financialAccount = 
+								_.find(creditNoteFinancialAccounts, function (creditNoteFinancialAccount)
+								{
+									return (creditNoteFinancialAccount.id == creditNote.financialaccount)
+								});
+
+							console.log(creditNote._financialAccount)
+
+							if (creditNote._financialAccount != undefined)
+							{
+								creditNote._financialAccountCode = creditNote._financialAccount.code
+							}
+						});
+
+						mydigitalstructure.set(
+						{
+							scope: 'app',
+							context: 'app-process-create-credit-notes-to-be-sent-to-xero',
+							value: creditNotes
+						});
+
+						mydigitalstructure.invoke('app-process-create-credit-notes-contact-links');		
+					}
+				}
+			}
+		});
+	
+
+		mydigitalstructure.add(
+		{
+			name: 'app-process-create-credit-notes-contact-links',
+			notes: 'Get the links to check if the contacts on the credit note have a link to xero.',
+			code: function (param, response)
+			{
+				var settings = mydigitalstructure.get({scope: '_settings'});
+
+				var creditNotesToBeSentToXero = mydigitalstructure.get(
+				{
+					scope: 'app',
+					context: 'app-process-create-credit-notes-to-be-sent-to-xero'
+				});
+
+				if (creditNotesToBeSentToXero.length == 0)
+				{
+					mydigitalstructure.invoke('util-end', {message: 'app-process-create-credit-notes-contact-links; No contacts.'});
+				}
+				else
+				{
+					if (response == undefined)
+					{
+						var contactsBusiness = [];
+						var contactsPerson = [];
+
+						var filters =
+						[
+							{
+								field: 'url',
+								value: settings.mydigitalstructure.xeroURL
+							},
+							{ name: '('}
+						]
+
+						var contacts = [];
+
+						_.each(creditNotesToBeSentToXero, function (creditNoteToBeSentToXero)
+						{
+							if (creditNoteToBeSentToXero.contactbusinesssentto != '')
+							{
+								var _contact = _.find(contacts, function (contact)
+								{
+									contact.object == 12 && contact.objectcontext == creditNoteToBeSentToXero.contactbusiness
+								})
+
+								if (_contact == undefined)
+								{
+									contacts.push(
+									{
+										object: 12,
+										objectcontext: creditNoteToBeSentToXero.contactbusiness,
+									})
+								}
+
+								creditNoteToBeSentToXero._contactObject = 12;
+								creditNoteToBeSentToXero._contactObjectContext = creditNoteToBeSentToXero.contactbusiness;
+
+								contactsBusiness.push(creditNoteToBeSentToXero.contactbusinesssentto)
+							}
+		
+							if (creditNoteToBeSentToXero.contactperson != '' && creditNoteToBeSentToXero.contactbusiness == '')
+							{
+								var _contact = _.find(contacts, function (contact)
+								{
+									contact.object == 32 && contact.objectcontext == creditNoteToBeSentToXero.contactperson
+								})
+
+								if (_contact == undefined)
+								{
+									contacts.push(
+									{
+										object: 32,
+										objectcontext: creditNoteToBeSentToXero.contactperson,
+									})
+								}
+
+								creditNoteToBeSentToXero._contactObject = 32;
+								creditNoteToBeSentToXero._contactObjectContext = creditNoteToBeSentToXero.contactperson;
+
+								contactsPerson.push(creditNoteToBeSentToXero.contactpersonsentto)
+							}
+						});
+
+						mydigitalstructure.set(
+						{
+							scope: 'app',
+							context: 'app-process-create-credit-notes-contact-links',
+							value: contacts
+						});
+
+						if (contactsBusiness.length != 0)
+						{
+							filters = _.concat(filters,
+							{
+								field: 'object',
+								value: 12
+							},
+							{
+								field: 'objectcontext',
+								comparison: 'IN_LIST',
+								value: contactsBusiness.join(',')
+							});
+
+							if (contactsPerson.length != 0)
+							{
+								filters = _.concat(filters, { name: 'or'});
+							}
+						}
+
+						if (contactsPerson.length != 0)
+						{
+							filters = _.concat(filters,
+							{
+								field: 'object',
+								value: 32
+							},
+							{
+								field: 'objectcontext',
+								comparison: 'IN_LIST',
+								value: contactsPerson.join(',')
+							});
+						}
+
+						filters = _.concat(filters, { name: ')'});
+
+						mydigitalstructure.cloud.search(
+						{
+							object: 'core_url_link',
+							fields:
+							[
+								'object', 'objectcontext', 'urlguid'
+							],
+							filters: filters,
+							rows: 99999,
+							sorts:
+							[
+
+							],
+							callback: 'app-process-create-credit-notes-contact-links'
+						});
+					}
+					else
+					{
+						var createCreditNotesContactsLinks = mydigitalstructure.set(
+						{
+							scope: 'app',
+							context: 'app-process-create-credit-notes-contact-links',
+							value: response.data.rows
+						});
+
+						_.each(creditNotesToBeSentToXero, function (creditNote)
+						{
+							creditNote._contactLink = 
+								_.find(createCreditNotesContactsLinks, function (createCreditNotesContactsLink)
+								{
+									return (
+											creditNote._contactObject == createCreditNotesContactsLink.object &&
+											creditNote._contactObjectContext == createCreditNotesContactsLink.objectcontext)
+								});
+
+								creditNote.contactLinked = (creditNote._contactLink != undefined);
+
+							if (creditNote.contactLinked)
+							{
+								creditNote.contactLinkID = creditNote._contactLink.urlguid;
+							}
+						});
+
+						 mydigitalstructure.set(
+						{
+							scope: 'app',
+							context: 'app-process-create-credit-notes-to-be-sent-to-xero',
+							value: creditNotesToBeSentToXero
+						});
+							
+						mydigitalstructure.invoke('app-process-create-credit-notes-process');				
+					}
+				}
+			}
+		});
+
+		mydigitalstructure.add(
+		{
+			name: 'app-process-create-credit-notes-process',
+			notes: 'Send credit notes to xero',
+			code: function (param)
+			{
+				var creditNotesToBeSentToXero = mydigitalstructure.get(
+				{
+					scope: 'app',
+					context: 'app-process-create-credit-notes-to-be-sent-to-xero'
+				});
+
+				var index = mydigitalstructure.get(
+				{
+					scope: 'app-process-create-credit-notes-process',
+					context: 'index',
+					valueDefault: 0
+				});
+
+				//1=GST Applies,2=GST Free - Export,3=GST Free - Other,4=GST Free - Input
+				var settings = mydigitalstructure.get({scope: '_settings'});
+
+				var taxTypes = settings.mydigitalstructure.taxTypes;
+
+				if (taxTypes == undefined)
+				{
+					taxTypes = 
+					{
+						1: 'OUTPUT',
+						2: 'EXEMPTOUTPUT',
+						3: 'EXEMPTOUTPUT',
+						4: 'EXEMPTOUTPUT'
+					}
+				}
+
+				var types = 
+				{
+					1: 'ACCRECCREDIT',
+					2: 'ACCPAYCREDIT'
+				}
+
+				if (index < creditNotesToBeSentToXero.length)
+				{
+					var creditNoteToBeSentToXero = creditNotesToBeSentToXero[index];
+
+					if (!creditNoteToBeSentToXero.contactLinked)
+					{
+						console.log('!!ERROR; No Linked Contact');
+						console.log(creditNoteToBeSentToXero);
+					}
+					else
+					{
+						var description = creditNoteToBeSentToXero.notes;
+						if (description == '') {description = creditNoteToBeSentToXero.financialaccounttext}
+
+						var xeroCreditNoteData =
+						{
+							type: types[creditNoteToBeSentToXero.type],
+							contact:
+							{
+								contactID: creditNoteToBeSentToXero.contactLinkID
+							},
+							date: moment(creditNoteToBeSentToXero.creditdate, 'DD MMM YYYY').format('YYYY-MM-DD'),
+							dueDate: moment(creditNoteToBeSentToXero.creditdate, 'DD MMM YYYY').format('YYYY-MM-DD'),
+							reference: creditNoteToBeSentToXero.reference,
+							status: xeroNode.CreditNote.StatusEnum.AUTHORISED,
+							lineAmountTypes: 'Inclusive',
+							lineItems:
+							[
+								{
+									description: description,
+									quantity: 1.0,
+									unitAmount: creditNoteToBeSentToXero.amount,
+									accountCode: creditNoteToBeSentToXero._financialAccountCode,
+									taxType: taxTypes[creditNoteToBeSentToXero.taxtype],
+									amount: creditNoteToBeSentToXero.amount
+								}
+							]
+						}
+
+						var xeroCreditNote =
+						{
+							creditNotes:
+							[
+								xeroCreditNoteData
+							]
+						};
+
+						creditNoteToBeSentToXero._xeroData = xeroCreditNote;
+						console.log(xeroCreditNote);
+						console.log(xeroCreditNoteData.lineItems);
+
+						//mydigitalstructure.invoke('util-end');
+
+						var xeroTenant = mydigitalstructure.get(
+						{
+							scope: 'app',
+							context: 'xero-tenant'
+						});
+
+						xero.accountingApi.createCreditNotes(xeroTenant.tenantId, xeroCreditNote)
+						.then(function (data)
+						{	
+							creditNoteToBeSentToXero._xero = data.response.body;
+
+							mydigitalstructure.set(
+							{
+								scope: 'app-process-create-credit-notes-process-next',
+								context: 'xero-credit-note',
+								value: data.response.body
+							});
+
+							console.log(creditNoteToBeSentToXero._xero)
+
+							mydigitalstructure.invoke('app-process-create-credit-notes-process-next');
+						},
+						function (data)
+						{
+							//console.log(data);
+							console.log(data.response.body);
+							console.log(data.response.body.Elements[0].ValidationErrors);
+						});	
+					}	
+				}
+				else
+				{
+					mydigitalstructure.invoke('util-end',
+					{
+						message: 'create-credit-notes; Complete.',
+						count: creditNotesToBeSentToXero.length
+					});
+				}		
+			}
+		});
+
+		mydigitalstructure.add(
+		{
+			name: 'app-process-create-credit-notes-process-next',
+			code: function (param, response)
+			{
+				var creditNotesToBeSentToXero = mydigitalstructure.get(
+				{
+					scope: 'app',
+					context: 'app-process-create-credit-notes-to-be-sent-to-xero'
+				});
+
+				var index = mydigitalstructure.get(
+				{
+					scope: 'app-process-create-credit-notes-process',
+					context: 'index'
+				});
+
+				if (response == undefined)
+				{
+					var xeroCreditNoteData = mydigitalstructure.get(
+					{
+						scope: 'app-process-create-credit-notes-process-next',
+						context: 'xero-credit-note'
+					});
+
+					var creditNoteToBeSentToXero = creditNotesToBeSentToXero[index];
+
+					//create link
+					if (_.has(xeroCreditNoteData, 'CreditNotes'))
+					{
+						var settings = mydigitalstructure.get({scope: '_settings'});
+
+						var xeroCreditNote = _.first(xeroCreditNoteData.CreditNotes)
+
+						var data =
+						{
+							url: settings.mydigitalstructure.xeroURL,
+							object: 69,
+							objectcontext: creditNoteToBeSentToXero.id,
+							urlguid: xeroCreditNote.CreditNoteID,
+							urlreference: _.truncate(xeroCreditNote.CreditNoteNumber, 97)
+						}
+
+						mydigitalstructure.cloud.save(
+						{
+							object: 'core_url_link',
+							data: data,
+							callback: 'app-process-create-credit-notes-process-next'
+						});
+					}
+				}
+				else
+				{
+					mydigitalstructure.set(
+					{
+						scope: 'app-process-create-credit-notes-process',
+						context: 'index',
+						value: index + 1
+					});
+
+					mydigitalstructure.invoke('app-process-create-credit-notes-process');
+				}
+			}
+		});
+	
+//---- CREATE-INVOICES
 
 		mydigitalstructure.add(
 		{
@@ -727,7 +2016,12 @@ exports.handler = function (event, context, callback)
 						},
 						{
 							name: ')'
-						}
+						},
+						{
+							field: 'amount',
+							comparison: 'NOT_EQUAL_TO',
+							value: 0
+						},
 					]
 
 					if (_.has(settings, 'mydigitalstructure.invoiceCreatedAfterDate'))
@@ -739,13 +2033,36 @@ exports.handler = function (event, context, callback)
 							value: settings.mydigitalstructure.invoiceCreatedAfterDate
 						})
 					}
+					else
+					{
+						filters.push(
+						{
+							field: 'createddate',
+							comparison: 'GREATER_THAN_OR_EQUAL_TO',
+							value: moment().add(-7, 'days').format('DD MMM YYYY')
+						})
+					}
+
+					if (settings.mydigitalstructure.invoicesMaximum == undefined)
+					{
+						settings.mydigitalstructure.invoicesMaximum = 100 
+					}
+
+					console.log(settings.mydigitalstructure.invoicesMaximum);
 
 					mydigitalstructure.cloud.search(
 					{
 						object: 'financial_invoice',
 						fields: ['guid', 'contactbusinesssentto', 'sentdate', 'duedate', 'reference'],
 						filters: filters,
-						rows: 100,
+						sorts:
+						[
+							{
+								name: 'createddate',
+								direction: 'asc'
+							}
+						],
+						rows: settings.mydigitalstructure.invoicesMaximum,
 						callback: 'app-process-create-invoices'
 					});
 				}
@@ -802,7 +2119,8 @@ exports.handler = function (event, context, callback)
 							'lineitem.financialaccount.code',
 							'taxtyperevenuetext',
 							'preadjustmentamount',
-							'preadjustmenttax'
+							'preadjustmenttax',
+							'taxtype'
 						]
 	
 						var settings = mydigitalstructure.get({scope: '_settings'});
@@ -892,7 +2210,13 @@ exports.handler = function (event, context, callback)
 								}
 							],
 							rows: 99999,
-							sorts: [],
+							sorts:
+							[
+								{
+									field: 'id',
+									direction: 'desc'
+								}
+							],
 							callback: 'app-process-create-invoices-to-send-contacts'
 						});
 					}
@@ -993,7 +2317,23 @@ exports.handler = function (event, context, callback)
 						dueDate: moment(invoiceToSend.duedate, 'DD MMM YYYY').format('YYYY-MM-DD'),
 						reference: invoiceToSend.reference,
 						status: xeroNode.Invoice.StatusEnum.AUTHORISED,
+						lineAmountTypes: 'Inclusive',
 						lineItems: []
+					}
+
+					//1=GST Applies,2=GST Free - Export,3=GST Free - Other,4=GST Free - Input
+					var settings = mydigitalstructure.get({scope: '_settings'});
+
+					var invoiceTaxTypes = settings.mydigitalstructure.taxTypes;
+					if (invoiceTaxTypes == undefined)
+					{
+						invoiceTaxTypes = 
+						{
+							1: 'OUTPUT',
+							2: 'EXEMPTOUTPUT',
+							3: 'EXEMPTOUTPUT',
+							4: 'EXEMPTOUTPUT'
+						}
 					}
 
 					_.each(invoiceToSend._lineItems, function (lineItem)
@@ -1001,18 +2341,36 @@ exports.handler = function (event, context, callback)
 						lineItem._preadjustmentamount = parseFloat(lineItem['preadjustmentamount'].replace(/,/g, ''));
 						lineItem._preadjustmenttax = parseFloat(lineItem['preadjustmenttax'].replace(/,/g, ''))
 
-						lineItem.amountextax = (lineItem._preadjustmentamount - lineItem._preadjustmenttax)
+						lineItem.amountextax = (lineItem._preadjustmentamount - lineItem._preadjustmenttax);
+						lineItem.amount = lineItem._preadjustmentamount;
 
-						xeroInvoiceData.lineItems.push(
+						var sendAsExclusive = false;
+
+						if (sendAsExclusive)
 						{
-							description: lineItem.description,
-							quantity: 1.0,
-							unitAmount: lineItem.amountextax,
-							accountCode: lineItem['lineitem.financialaccount.code'],
-							taxType: 'OUTPUT',
-							lineAmount: lineItem.amountextax
-						});
-
+							xeroInvoiceData.lineAmountTypes = 'Exclusive'
+							xeroInvoiceData.lineItems.push(
+							{
+								description: lineItem.description,
+								quantity: 1.0,
+								unitAmount: lineItem.amountextax,
+								accountCode: lineItem['lineitem.financialaccount.code'],
+								taxType: invoiceTaxTypes[lineItem.taxtype],
+								lineAmount: lineItem.amountextax
+							});
+						}
+						else
+						{	
+							xeroInvoiceData.lineItems.push(
+							{
+								description: lineItem.description,
+								quantity: 1.0,
+								unitAmount: lineItem.amount,
+								accountCode: lineItem['lineitem.financialaccount.code'],
+								taxType: 'OUTPUT',
+								lineAmount: lineItem.amount
+							});
+						}
 					});
 
 					var xeroInvoice =
@@ -1023,26 +2381,49 @@ exports.handler = function (event, context, callback)
 						]
 					};
 
+					invoiceToSend._xeroData = xeroInvoiceData;
+					console.log(xeroInvoice);
+
 					var xeroTenant = mydigitalstructure.get(
 					{
 						scope: 'app',
 						context: 'xero-tenant'
 					});
 
-					xero.accountingApi.createInvoices(xeroTenant.tenantId, xeroInvoice)
-					.then(function (data)
-					{	
-						invoiceToSend._xero = data.response.body;
-
+					if (invoiceToSend._lineItems.length == 0)
+					{
 						mydigitalstructure.set(
 						{
-							scope: 'app-process-invoices-to-send-contact-linked-process-next',
-							context: 'xero-invoice',
-							value: data.response.body
-						})
+							scope: 'app-process-invoices-to-send-contact-linked-process',
+							context: 'index',
+							value: index + 1
+						});
 
-						mydigitalstructure.invoke('app-process-invoices-to-send-contact-linked-process-next');
-					});		
+						mydigitalstructure.invoke('app-process-invoices-to-send-contact-linked-process');
+					}
+					else
+					{
+						xero.accountingApi.createInvoices(xeroTenant.tenantId, xeroInvoice)
+						.then(function (data)
+						{	
+							invoiceToSend._xero = data.response.body;
+
+							mydigitalstructure.set(
+							{
+								scope: 'app-process-invoices-to-send-contact-linked-process-next',
+								context: 'xero-invoice',
+								value: data.response.body
+							})
+
+							mydigitalstructure.invoke('app-process-invoices-to-send-contact-linked-process-next');
+						},
+						function (data)
+						{
+							//console.log(data);
+							console.log(data.response.body);
+							console.log(data.response.body.Elements[0].ValidationErrors);
+						});	
+					}
 				}
 				else
 				{
@@ -1164,7 +2545,7 @@ exports.handler = function (event, context, callback)
 			}
 		});
 
-	//-- get-invoices
+		//-- get-invoices
 		//-- to see if have been paid
 		//-- https://xeroapi.github.io/xero-node/v4/accounting/#api-Accounting-getInvoices
 
@@ -1269,7 +2650,13 @@ exports.handler = function (event, context, callback)
 							],
 							filters: filters,
 							rows: 99999,
-							sorts: [],
+							sorts:
+							[
+								{
+									field: 'id',
+									direction: 'desc'
+								}
+							],
 							callback: 'app-process-get-invoices-links'
 						});
 					}
@@ -1353,7 +2740,9 @@ exports.handler = function (event, context, callback)
 				xero.accountingApi.getInvoices(xeroTenant.tenantId, null, null, null, xeroInvoiceIDs)
 				.then(function (data)
 				{
-					var xeroInvoices = data.body.invoices
+					var xeroInvoices = data.body.invoices;
+
+					console.log(xeroInvoices)
 					
 					mydigitalstructure.set(
 					{
@@ -1438,10 +2827,10 @@ exports.handler = function (event, context, callback)
 					var fullyPaidInvoice = fullyPaidInvoices[index];
 
 					var data =
-					{
-
+					{ 
 						id: fullyPaidInvoice.id,
-						status: settings.mydigitalstructure.invoiceStatuses.fullypaidinxero
+						status: settings.mydigitalstructure.invoiceStatuses.fullypaidinxero,
+						_fullyreceipteddate: moment().format('DD MMM YYYY')
 					}
 
 					mydigitalstructure.cloud.save(
