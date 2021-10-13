@@ -33,6 +33,7 @@
 	lambda-local -l index.js -t 9000 -e event-create-credit-notes.json
 	lambda-local -l index.js -t 9000 -e event-apply-credit-notes.json
 	lambda-local -l index.js -t 9000 -e event-create-apply-credit-notes.json
+	lambda-local -l index.js -t 9000 -e event-convert-contacts.json
 
 	Upload to lambda; Terminal;
 	zip -r ../mydigitalstructure-xero-DDMMMYYY-1.zip *
@@ -567,6 +568,11 @@ exports.handler = function (event, context, callback)
 							data: data,
 							callback: 'app-process-get-contacts-check-complete'
 						});
+					}
+					else
+					{
+						console.log(xeroContactCustomersUnmatched);
+						mydigitalstructure.invoke('app-process-get-contacts-check-complete');
 					}
 				}
 				else
@@ -3364,6 +3370,183 @@ exports.handler = function (event, context, callback)
 				});
 
 				mydigitalstructure.invoke('app-process-get-invoices-process');
+			}
+		});
+
+		//---- convert-contacts
+		//---- Convert contacts within mydigitalstructure based on event.fields[contactBusiness/contactPerson]
+
+		mydigitalstructure.add(
+		{
+			name: 'app-process-convert-contacts',
+			code: function (param, response)
+			{
+				var event = mydigitalstructure.get({scope: '_event'});
+
+				if (response == undefined)
+				{
+					mydigitalstructure.cloud.search(
+					{
+						object: event.object,
+						fields: [event.field],
+						filters:
+						[
+							{field: event.field, comparision: 'IS_NOT_NULL'}
+						],
+						callback: 'app-process-convert-contacts',
+						callbackParam: param,
+					});
+				}
+				else
+				{
+					mydigitalstructure.set(
+					{
+						scope: 'app-process-convert-contacts',
+						context: 'contacts',
+						value: response.data.rows
+					});
+
+					mydigitalstructure.invoke('app-process-convert-contacts-links');
+				}
+			}
+		});
+
+		mydigitalstructure.add(
+		{
+			name: 'app-process-convert-contacts-links',
+			code: function (param, response)
+			{
+				var event = mydigitalstructure.get({scope: '_event'});
+				var settings = mydigitalstructure.get({scope: '_settings'});
+
+				if (response == undefined)
+				{
+					mydigitalstructure.cloud.search(
+					{
+						object: 'core_url_link',
+						fields:
+						[
+							'objectcontext', 'urlguid'
+						],
+						filters:
+						[
+							{
+								field: 'url',
+								value: settings.mydigitalstructure.xeroURL
+							},
+							{
+								field: 'object',
+								value: event.objectID
+							}
+						],
+						rows: 99999,
+						callback: 'app-process-convert-contacts-links'
+					});
+				}
+				else
+				{
+					mydigitalstructure.set(
+					{
+						scope: 'app-process-convert-contacts-links',
+						context: 'contacts-links',
+						value: response.data.rows
+					});
+
+					mydigitalstructure.set(
+					{
+						scope: 'app-process-convert-contacts-process',
+						context: 'index',
+						value: 0
+					});
+
+					mydigitalstructure.invoke('app-process-convert-contacts-process');
+				}
+			}
+		});
+
+		mydigitalstructure.add(
+		{
+			name: 'app-process-convert-contacts-process',
+			code: function (param)
+			{
+				var event = mydigitalstructure.get({scope: '_event'});
+				var settings = mydigitalstructure.get({scope: '_settings'});
+
+				var contacts = mydigitalstructure.get(
+				{
+					scope: 'app-process-convert-contacts',
+					context: 'contacts'
+				});
+				
+				var contactLinks = mydigitalstructure.get(
+				{
+					scope: 'app-process-convert-contacts-links',
+					context: 'contacts-links'
+				});
+
+				var index = mydigitalstructure.get(
+				{
+					scope: 'app-process-convert-contacts-process',
+					context: 'index'
+				});
+
+				if (index < contacts.length)
+				{
+					var contact = contacts[index];
+
+					var contactLink = _.find(contactLinks, function (contactLink) {return contactLink.objectcontext == contact.id});
+
+					if (contactLink == undefined)
+					{
+						var data =
+						{
+							object: event.objectID,
+							url: settings.mydigitalstructure.xeroURL,
+							objectcontext: contact.id,
+							urlguid: contact[event.field],
+							urlreference: _.truncate(contact[event.field], 97)
+						}
+
+						mydigitalstructure.cloud.save(
+						{
+							object: 'core_url_link',
+							data: data,
+							callback: 'app-process-convert-contacts-process-next'
+						});
+					else
+					{
+						app.invoke('app-process-convert-contacts-process-next')
+					}
+				}
+				else
+				{
+					mydigitalstructure.invoke('util-end',
+					{
+						message: 'covert-contacts; Complete. [' + contacts.length + ']',
+					});
+				}
+			}
+		});
+
+		mydigitalstructure.add(
+		{
+			name: 'app-process-convert-contacts-process-next',
+			code: function (param, response)
+			{
+				var index = mydigitalstructure.get(
+				{
+					scope: 'app-process-convert-contacts-process',
+					context: 'index'
+				});
+
+				mydigitalstructure.set(
+				{
+					scope: 'aapp-process-convert-contacts-process',
+					context: 'index',
+					value: index + 1
+				});
+
+				mydigitalstructure.invoke('app-process-convert-contacts-process');
 			}
 		});
 
