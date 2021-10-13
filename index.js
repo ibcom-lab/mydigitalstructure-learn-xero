@@ -3513,6 +3513,7 @@ exports.handler = function (event, context, callback)
 							data: data,
 							callback: 'app-process-convert-contacts-process-next'
 						});
+					}
 					else
 					{
 						app.invoke('app-process-convert-contacts-process-next')
