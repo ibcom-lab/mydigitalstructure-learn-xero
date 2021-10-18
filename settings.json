@@ -24,7 +24,8 @@
 			"senttoxero": "0",
 			"donotsendtoxero": "0",
 			"fullypaidinxero": "0"
-		}
+		},
+		"setXeroInvoiceNumber": "true"
 	},
 	"xero":
 	{

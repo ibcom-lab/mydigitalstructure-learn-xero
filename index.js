@@ -953,7 +953,7 @@ exports.handler = function (event, context, callback)
 										objectcontext: invoiceContact.contactbusinesssentto,
 										data:
 										{
-											name: invoiceContact['invoice.contactbusinesssentto.legalname'],
+											name: _.unescape(invoiceContact['invoice.contactbusinesssentto.legalname']),
 											firstName: invoiceContact['invoice.contactpersonsentto.firstname'],
 											lastName: invoiceContact['invoice.contactpersonsentto.surname'],
 											contactNumber: invoiceContact['invoice.contactbusinesssentto.guid'],
@@ -2787,6 +2787,7 @@ exports.handler = function (event, context, callback)
 			code: function (param)
 			{
 				//send invoices to xero
+				var settings = mydigitalstructure.get({scope: '_settings'});
 
 				var invoicesToSendLinkedContact = mydigitalstructure.get(
 				{
@@ -2820,9 +2821,13 @@ exports.handler = function (event, context, callback)
 						lineItems: []
 					}
 
-					//1=GST Applies,2=GST Free - Export,3=GST Free - Other,4=GST Free - Input
-					var settings = mydigitalstructure.get({scope: '_settings'});
+					if (settings.mydigitalstructure.setXeroInvoiceNumber == 'true')
+					{
+						xeroInvoiceData.InvoiceNumber = invoiceToSend.reference;
+					}
 
+					//1=GST Applies,2=GST Free - Export,3=GST Free - Other,4=GST Free - Input
+					
 					var invoiceTaxTypes = settings.mydigitalstructure.taxTypes;
 					if (invoiceTaxTypes == undefined)
 					{
